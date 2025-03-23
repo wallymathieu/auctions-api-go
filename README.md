@@ -51,7 +51,7 @@ The server will start on port 8080.
 
 ### Authentication
 
-All write operations require authentication via the `x-jwt-payload` header.
+All write operations require authentication via the `x-jwt-payload` header. Note that the `x-jwt-payload` header is a decoded JWT and not an actual JWT, since this app is supposed to be deployed behind a front-proxy.
 
 Example JWT payload format for a buyer/seller:
 ```json
