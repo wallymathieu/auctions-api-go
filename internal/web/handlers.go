@@ -111,7 +111,7 @@ func createAuction(state *AppState, onEvent func(domain.Event) error, getCurrent
 
 		// Create auction
 		var auctionType domain.AuctionType
-		if req.Type.Type != "" {
+		if req.Type.Type != 0 {
 			auctionType = req.Type
 		} else {
 			// Default to English auction

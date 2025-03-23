@@ -6,18 +6,36 @@ import (
 	"time"
 )
 
+// AuctionTypeEnum represents the type of auction as an enum
+type AuctionTypeEnum int
+
+const (
+	TimedAscending  AuctionTypeEnum = iota
+	SingleSealedBid                 = 1
+)
+
+// String returns the string representation of the auction type enum
+func (t AuctionTypeEnum) String() string {
+	switch t {
+	case TimedAscending:
+		return "TimedAscending"
+	case SingleSealedBid:
+		return "SingleSealedBid"
+	default:
+		return "Unknown"
+	}
+}
+
 // AuctionType represents the type of auction
 type AuctionType struct {
-	// Can be either TimedAscending or SingleSealedBid
-	Type string `json:"type"`
-	// Options stored as a string
-	Options string `json:"options"`
+	Type    AuctionTypeEnum `json:"type"`
+	Options string          `json:"options"`
 }
 
 // NewTimedAscendingType creates a new TimedAscending auction type
 func NewTimedAscendingType(options TimedAscendingOptions) AuctionType {
 	return AuctionType{
-		Type:    "TimedAscending",
+		Type:    TimedAscending,
 		Options: options.String(),
 	}
 }
@@ -25,7 +43,7 @@ func NewTimedAscendingType(options TimedAscendingOptions) AuctionType {
 // NewSingleSealedBidType creates a new SingleSealedBid auction type
 func NewSingleSealedBidType(options SealedBidOptions) AuctionType {
 	return AuctionType{
-		Type:    "SingleSealedBid",
+		Type:    SingleSealedBid,
 		Options: string(options),
 	}
 }
@@ -48,10 +66,10 @@ func (t *AuctionType) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
-		t.Type = "TimedAscending"
+		t.Type = TimedAscending
 		t.Options = options.String()
 	} else if s == "Vickrey" || s == "Blind" {
-		t.Type = "SingleSealedBid"
+		t.Type = SingleSealedBid
 		t.Options = s
 	} else {
 		return fmt.Errorf("unknown auction type: %s", s)
@@ -104,10 +122,10 @@ func (a Auction) ValidateBid(bid Bid) error {
 
 // CreateEmptyState creates a new state for the auction
 func (a Auction) CreateEmptyState() State {
-	if a.Type.Type == "SingleSealedBid" {
+	if a.Type.Type == SingleSealedBid {
 		options := SealedBidOptions(a.Type.Options)
 		return NewSealedBidState(a.Expiry, options)
-	} else if a.Type.Type == "TimedAscending" {
+	} else if a.Type.Type == TimedAscending {
 		options, err := ParseTimedAscendingOptions(a.Type.Options)
 		if err != nil {
 			// Fall back to default options if parsing fails

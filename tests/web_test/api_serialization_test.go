@@ -54,8 +54,9 @@ func TestAuctionDeserialization(t *testing.T) {
 	// Check default auction type
 	// In the Go version, we'd typically set this in the handler when it's not provided
 	// but for now we just check it's empty in the request
-	if req.Type.Type != "" {
-		t.Errorf("Expected Type to be empty, got %s", req.Type.Type)
+	var zeroValue domain.AuctionTypeEnum // Zero value of the enum
+	if req.Type.Type != zeroValue {
+		t.Errorf("Expected Type to be empty, got %v", req.Type.Type)
 	}
 }
 
@@ -147,8 +148,8 @@ func TestAuctionTypeSerialization(t *testing.T) {
 	}
 
 	// Check the parsed values
-	if parsedType.Type != "SingleSealedBid" || parsedType.Options != "Vickrey" {
-		t.Errorf("Expected AuctionType to be SingleSealedBid with options Vickrey, got %s with options %s",
+	if parsedType.Type != domain.SingleSealedBid || parsedType.Options != "Vickrey" {
+		t.Errorf("Expected AuctionType to be SingleSealedBid with options Vickrey, got %v with options %s",
 			parsedType.Type, parsedType.Options)
 	}
 
