@@ -19,8 +19,8 @@ var (
 	buyer1          = domain.NewBuyerOrSeller("Buyer_1", "Buyer 1")
 	buyer2          = domain.NewBuyerOrSeller("Buyer_2", "Buyer 2")
 	buyer3          = domain.NewBuyerOrSeller("Buyer_3", "Buyer 3")
-	bidAmount1      = domain.Amount{Currency: domain.SEK, Value: 10}
-	bidAmount2      = domain.Amount{Currency: domain.SEK, Value: 12}
+	bidAmount1      = int64(10)
+	bidAmount2      = int64(12)
 )
 
 // Helper function to parse time
@@ -69,7 +69,7 @@ func createBidLessThan2() domain.Bid {
 		ForAuction: sampleAuctionId,
 		Bidder:     buyer3,
 		At:         sampleStartsAt.Add(3 * time.Second),
-		Amount:     domain.Amount{Currency: domain.SEK, Value: 11},
+		Amount:     11,
 	}
 }
 
@@ -259,7 +259,7 @@ func TestVickreyAuctionState(t *testing.T) {
 
 // Test timed ascending (English) auction
 func TestTimedAscendingAuctionState(t *testing.T) {
-	options := domain.DefaultTimedAscendingOptions(domain.SEK)
+	options := domain.DefaultTimedAscendingOptions()
 	timedAscAuction := sampleAuctionOfType(domain.NewTimedAscendingType(options))
 	emptyAscAuctionState := timedAscAuction.CreateEmptyState()
 	bid1 := createBid1()
@@ -379,8 +379,8 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 	t.Run("ReservePriceWorks", func(t *testing.T) {
 		// Create an auction with a reserve price
 		reserveOptions := domain.TimedAscendingOptions{
-			ReservePrice: domain.Amount{Currency: domain.SEK, Value: 15},
-			MinRaise:     domain.Amount{Currency: domain.SEK, Value: 0},
+			ReservePrice: 15,
+			MinRaise:     0,
 			TimeFrame:    0,
 		}
 
@@ -405,7 +405,7 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			ForAuction: sampleAuctionId,
 			Bidder:     buyer3,
 			At:         sampleStartsAt.Add(3 * time.Second),
-			Amount:     domain.Amount{Currency: domain.SEK, Value: 20},
+			Amount:     20,
 		}
 
 		// Start with a fresh state
@@ -419,8 +419,8 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			t.Errorf("Expected to find winner when highest bid is above reserve price")
 		}
 
-		if amount.Value != 20 {
-			t.Errorf("Expected winning amount to be 20, got %v", amount.Value)
+		if amount != 20 {
+			t.Errorf("Expected winning amount to be 20, got %v", amount)
 		}
 
 		if winner != buyer3.ID {
@@ -432,8 +432,8 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 	t.Run("MinimumRaiseWorks", func(t *testing.T) {
 		// Create an auction with a minimum raise requirement
 		minRaiseOptions := domain.TimedAscendingOptions{
-			ReservePrice: domain.Amount{Currency: domain.SEK, Value: 0},
-			MinRaise:     domain.Amount{Currency: domain.SEK, Value: 5},
+			ReservePrice: 0,
+			MinRaise:     5,
 			TimeFrame:    0,
 		}
 
@@ -451,7 +451,7 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			ForAuction: sampleAuctionId,
 			Bidder:     buyer2,
 			At:         sampleStartsAt.Add(2 * time.Second),
-			Amount:     domain.Amount{Currency: domain.SEK, Value: 14}, // Only 4 more than bid1
+			Amount:     14, // Only 4 more than bid1
 		}
 
 		_, err := stateWith1Bid.AddBid(smallRaiseBid)
@@ -464,7 +464,7 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			ForAuction: sampleAuctionId,
 			Bidder:     buyer2,
 			At:         sampleStartsAt.Add(2 * time.Second),
-			Amount:     domain.Amount{Currency: domain.SEK, Value: 15}, // 5 more than bid1
+			Amount:     15, // 5 more than bid1
 		}
 
 		stateWith2Bids, err := stateWith1Bid.AddBid(goodRaiseBid)
@@ -477,8 +477,8 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			t.Errorf("Expected 2 bids, got %d", len(bids))
 		}
 
-		if bids[0].Amount.Value != 15 {
-			t.Errorf("Expected highest bid to be 15, got %v", bids[0].Amount.Value)
+		if bids[0].Amount != 15 {
+			t.Errorf("Expected highest bid to be 15, got %v", bids[0].Amount)
 		}
 	})
 
@@ -486,8 +486,8 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 	t.Run("TimeFrameWorks", func(t *testing.T) {
 		// Create an auction with a time frame
 		timeFrameOptions := domain.TimedAscendingOptions{
-			ReservePrice: domain.Amount{Currency: domain.SEK, Value: 0},
-			MinRaise:     domain.Amount{Currency: domain.SEK, Value: 0},
+			ReservePrice: 0,
+			MinRaise:     0,
 			TimeFrame:    10 * time.Minute,
 		}
 
@@ -503,7 +503,7 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 			ForAuction: sampleAuctionId,
 			Bidder:     buyer1,
 			At:         bidTime,
-			Amount:     domain.Amount{Currency: domain.SEK, Value: 10},
+			Amount:     10,
 		}
 
 		stateWithLateBid, _ := activeState.AddBid(lateBid)
@@ -528,7 +528,7 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 // Test command handling
 func TestCommandHandling(t *testing.T) {
 	// Create an auction
-	options := domain.DefaultTimedAscendingOptions(domain.SEK)
+	options := domain.DefaultTimedAscendingOptions()
 	auction := sampleAuctionOfType(domain.NewTimedAscendingType(options))
 	now := time.Now()
 
@@ -602,7 +602,7 @@ func TestCommandHandling(t *testing.T) {
 			ForAuction: auction.ID,
 			Bidder:     buyer1,
 			At:         sampleStartsAt.Add(time.Second),
-			Amount:     domain.Amount{Currency: domain.SEK, Value: 10},
+			Amount:     10,
 		}
 
 		cmd := domain.PlaceBidCommand{

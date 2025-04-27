@@ -70,7 +70,7 @@ func getAuction(state *AppState) http.HandlerFunc {
 
 		// Get winner information
 		var winner *domain.UserId
-		var winnerPrice *domain.Amount
+		var winnerPrice *int64
 		if amount, userId, found := auctionState.TryGetAmountAndWinner(); found {
 			winner = &userId
 			winnerPrice = &amount
@@ -115,7 +115,7 @@ func createAuction(state *AppState, onEvent func(domain.Event) error, getCurrent
 			auctionType = req.Type
 		} else {
 			// Default to English auction
-			options := domain.DefaultTimedAscendingOptions(req.Currency)
+			options := domain.DefaultTimedAscendingOptions()
 			auctionType = domain.NewTimedAscendingType(options)
 		}
 
@@ -194,7 +194,7 @@ func placeBid(state *AppState, onEvent func(domain.Event) error, getCurrentTime 
 
 		// Get auction from repository
 		repo := state.GetRepository()
-		entry, ok := repo[domain.AuctionId(id)]
+		_, ok := repo[domain.AuctionId(id)]
 		if !ok {
 			respondError(w, http.StatusNotFound, "Auction not found")
 			return
@@ -205,7 +205,7 @@ func placeBid(state *AppState, onEvent func(domain.Event) error, getCurrentTime 
 			ForAuction: domain.AuctionId(id),
 			Bidder:     user,
 			At:         getCurrentTime(),
-			Amount:     domain.Amount{Currency: entry.Auction.Currency, Value: req.Amount},
+			Amount:     req.Amount,
 		}
 
 		// Create command
