@@ -20,6 +20,13 @@ func TestAPI(t *testing.T) {
 		return fixedTime
 	}
 
+	// Command handler that just records events
+	var recordedCommands []domain.Command
+	onCommand := func(command domain.Command) error {
+		recordedCommands = append(recordedCommands, command)
+		return nil
+	}
+
 	// Event handler that just records events
 	var recordedEvents []domain.Event
 	onEvent := func(event domain.Event) error {
@@ -28,7 +35,7 @@ func TestAPI(t *testing.T) {
 	}
 
 	// Create app with empty repository
-	app := web.NewApp(domain.Repository{}, onEvent, getCurrentTime)
+	app := web.NewApp(domain.Repository{}, onCommand, onEvent, getCurrentTime)
 
 	// Define JWT headers
 	sellerJWT := "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
