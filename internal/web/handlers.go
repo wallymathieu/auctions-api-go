@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -136,7 +137,9 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 		}
 
 		if err := onCommand(cmd); err != nil {
-			// Log the error but continue
+			log.Fatalf("Failed to observe command: %v", err)
+			respondError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
 
 		// Handle command
@@ -160,9 +163,9 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 
 		// Call event handler
 		if err := onEvent(event); err != nil {
-			// Log the error but continue
-			// In a real application, this should be properly handled
-			// For now, just return success to the client
+			log.Fatalf("Failed to observe event: %v", err)
+			respondError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
 
 		// Return the event
@@ -211,7 +214,9 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 		}
 
 		if err := onCommand(cmd); err != nil {
-			// Log the error but continue
+			log.Fatalf("Failed to observe command: %v", err)
+			respondError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
 
 		// Get auction from repository
@@ -242,7 +247,9 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 
 		// Call event handler
 		if err := onEvent(event); err != nil {
-			// Log the error but continue
+			log.Fatalf("Failed to observe event: %v", err)
+			respondError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
 
 		// Return the event
