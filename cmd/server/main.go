@@ -12,6 +12,7 @@ import (
 )
 
 const eventsFile = "tmp/events.jsonl"
+const commandsFile = "tmp/commands.jsonl"
 
 func main() {
 	// Ensure directory exists
@@ -29,6 +30,10 @@ func main() {
 	// Initialize repository
 	repo := domain.EventsToAuctionStates(events)
 
+	onCommand := func(command domain.Command) error {
+		return persistence.WriteCommands(commandsFile, []domain.Command{command})
+	}
+
 	// Event handler
 	onEvent := func(event domain.Event) error {
 		return persistence.WriteEvents(eventsFile, []domain.Event{event})
@@ -38,7 +43,7 @@ func main() {
 	getCurrentTime := time.Now
 
 	// Create web application
-	app := web.NewApp(repo, onEvent, getCurrentTime)
+	app := web.NewApp(repo, onCommand, onEvent, getCurrentTime)
 
 	// Start server
 	log.Fatal(app.Run(":8080"))
