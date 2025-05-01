@@ -93,7 +93,7 @@ func getAuction(state *AppState) http.HandlerFunc {
 }
 
 // createAuction creates a new auction
-func createAuction(state *AppState, onEvent func(domain.Event) error, getCurrentTime func() time.Time) http.HandlerFunc {
+func createAuction(state *AppState, onCommand func(domain.Command) error, onEvent func(domain.Event) error, getCurrentTime func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse request body
 		var req AddAuctionRequest
@@ -135,6 +135,10 @@ func createAuction(state *AppState, onEvent func(domain.Event) error, getCurrent
 			Auction: auction,
 		}
 
+		if err := onCommand(cmd); err != nil {
+			// Log the error but continue
+		}
+
 		// Handle command
 		repo := state.GetRepository()
 		event, newRepo, err := domain.Handle(cmd, repo)
@@ -167,7 +171,7 @@ func createAuction(state *AppState, onEvent func(domain.Event) error, getCurrent
 }
 
 // placeBid places a bid on an auction
-func placeBid(state *AppState, onEvent func(domain.Event) error, getCurrentTime func() time.Time) http.HandlerFunc {
+func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent func(domain.Event) error, getCurrentTime func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse auction ID from path
 		vars := mux.Vars(r)
@@ -192,14 +196,6 @@ func placeBid(state *AppState, onEvent func(domain.Event) error, getCurrentTime 
 			return
 		}
 
-		// Get auction from repository
-		repo := state.GetRepository()
-		_, ok := repo[domain.AuctionId(id)]
-		if !ok {
-			respondError(w, http.StatusNotFound, "Auction not found")
-			return
-		}
-
 		// Create bid
 		bid := domain.Bid{
 			ForAuction: domain.AuctionId(id),
@@ -212,6 +208,18 @@ func placeBid(state *AppState, onEvent func(domain.Event) error, getCurrentTime 
 		cmd := domain.PlaceBidCommand{
 			Time: getCurrentTime(),
 			Bid:  bid,
+		}
+
+		if err := onCommand(cmd); err != nil {
+			// Log the error but continue
+		}
+
+		// Get auction from repository
+		repo := state.GetRepository()
+		_, ok := repo[domain.AuctionId(id)]
+		if !ok {
+			respondError(w, http.StatusNotFound, "Auction not found")
+			return
 		}
 
 		// Handle command
