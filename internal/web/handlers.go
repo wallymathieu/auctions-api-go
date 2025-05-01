@@ -137,7 +137,7 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 		}
 
 		if err := onCommand(cmd); err != nil {
-			log.Fatalf("Failed to observe command: %v", err)
+			log.Printf("Failed to observe command: %v", err)
 			respondError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
@@ -163,7 +163,7 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 
 		// Call event handler
 		if err := onEvent(event); err != nil {
-			log.Fatalf("Failed to observe event: %v", err)
+			log.Printf("Failed to observe event: %v", err)
 			respondError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
@@ -214,7 +214,7 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 		}
 
 		if err := onCommand(cmd); err != nil {
-			log.Fatalf("Failed to observe command: %v", err)
+			log.Printf("Failed to observe command: %v", err)
 			respondError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
@@ -247,7 +247,7 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 
 		// Call event handler
 		if err := onEvent(event); err != nil {
-			log.Fatalf("Failed to observe event: %v", err)
+			log.Printf("Failed to observe event: %v", err)
 			respondError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
