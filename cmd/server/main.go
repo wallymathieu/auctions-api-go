@@ -11,11 +11,27 @@ import (
 	"auction-site-go/internal/web"
 )
 
-const eventsFile = "tmp/events.jsonl"
-const commandsFile = "tmp/commands.jsonl"
-
 func main() {
+	// Get file paths from environment variables or use defaults
+	log.Println("Reading configuration from environment variables")
+	eventsFile := os.Getenv("EVENTS_FILE")
+	if eventsFile == "" {
+		eventsFile = "tmp/events.jsonl"
+	}
+
+	commandsFile := os.Getenv("COMMANDS_FILE")
+	if commandsFile == "" {
+		commandsFile = "tmp/commands.jsonl"
+	}
+
+	// Get server port from environment variables or use default
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	// Ensure directory exists
+	log.Printf("Ensuring directory exists for events file: %s", eventsFile)
 	dir := filepath.Dir(eventsFile)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Fatalf("Failed to create directory: %v", err)
@@ -46,5 +62,6 @@ func main() {
 	app := web.NewApp(repo, onCommand, onEvent, getCurrentTime)
 
 	// Start server
-	log.Fatal(app.Run(":8080"))
+	log.Printf("Starting server on port %s", port)
+	log.Fatal(app.Run(":" + port))
 }
