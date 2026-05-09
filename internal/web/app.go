@@ -47,7 +47,7 @@ func (a *App) setupRoutes() {
 
 	// Routes
 	a.Router.HandleFunc("/auctions", getAuctions(a.State)).Methods("GET")
-	a.Router.HandleFunc("/auctions/{id}", getAuction(a.State)).Methods("GET")
+	a.Router.HandleFunc("/auctions/{id}", getAuction(a.State, a.GetCurrentTime)).Methods("GET")
 	a.Router.HandleFunc("/auctions", createAuction(a.State, a.OnCommand, a.OnEvent, a.GetCurrentTime)).Methods("POST")
 	a.Router.HandleFunc("/auctions/{id}/bids", placeBid(a.State, a.OnCommand, a.OnEvent, a.GetCurrentTime)).Methods("POST")
 }

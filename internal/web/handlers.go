@@ -37,7 +37,7 @@ func getAuctions(state *AppState) http.HandlerFunc {
 }
 
 // getAuction returns a specific auction
-func getAuction(state *AppState) http.HandlerFunc {
+func getAuction(state *AppState, getCurrentTime func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse auction ID from path
 		vars := mux.Vars(r)
@@ -52,12 +52,13 @@ func getAuction(state *AppState) http.HandlerFunc {
 		repo := state.GetRepository()
 		entry, ok := repo[domain.AuctionId(id)]
 		if !ok {
-			respondError(w, http.StatusNotFound, "Auction not found")
+			respondDomainError(w, domain.NewUnknownAuctionError(domain.AuctionId(id)))
 			return
 		}
 
 		auction := entry.Auction
-		auctionState := entry.State
+		// Advance state to the current time so a winner surfaces once the auction has ended.
+		auctionState := entry.State.Increment(getCurrentTime())
 
 		// Get bids
 		bids := auctionState.GetBids()
@@ -130,9 +131,17 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 			Currency: req.Currency,
 		}
 
+		now := getCurrentTime()
+
+		// Reject auctions that have already ended; they must not be persisted.
+		if !req.EndsAt.After(now) {
+			respondDomainError(w, domain.NewAuctionHasEndedError(req.ID))
+			return
+		}
+
 		// Create command
 		cmd := domain.AddAuctionCommand{
-			Time:    getCurrentTime(),
+			Time:    now,
 			Auction: auction,
 		}
 
@@ -146,15 +155,7 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 		repo := state.GetRepository()
 		event, newRepo, err := domain.Handle(cmd, repo)
 		if err != nil {
-			var domainErr domain.DomainError
-			ok := false
-			if domainErr, ok = err.(domain.DomainError); ok {
-				if domainErr.Type == domain.ErrorAuctionAlreadyExists {
-					respondError(w, http.StatusConflict, err.Error())
-					return
-				}
-			}
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondDomainError(w, err)
 			return
 		}
 
@@ -219,26 +220,11 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 			return
 		}
 
-		// Get auction from repository
-		repo := state.GetRepository()
-		_, ok := repo[domain.AuctionId(id)]
-		if !ok {
-			respondError(w, http.StatusNotFound, "Auction not found")
-			return
-		}
-
 		// Handle command
+		repo := state.GetRepository()
 		event, newRepo, err := domain.Handle(cmd, repo)
 		if err != nil {
-			var domainErr domain.DomainError
-			ok := false
-			if domainErr, ok = err.(domain.DomainError); ok {
-				if domainErr.Type == domain.ErrorUnknownAuction {
-					respondError(w, http.StatusNotFound, "Auction not found")
-					return
-				}
-			}
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondDomainError(w, err)
 			return
 		}
 
@@ -287,4 +273,55 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 // respondError responds with an error message
 func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, ApiError{Message: message})
+}
+
+// respondDomainError translates a domain error into the typed HTTP error
+// envelope expected by API clients: {"type": "...", ...}.
+func respondDomainError(w http.ResponseWriter, err error) {
+	domainErr, ok := err.(domain.DomainError)
+	if !ok {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	switch domainErr.Type {
+	case domain.ErrorUnknownAuction:
+		respondJSON(w, http.StatusNotFound, map[string]interface{}{
+			"type":      "AuctionNotFound",
+			"auctionId": domainErr.Data,
+		})
+	case domain.ErrorAuctionAlreadyExists:
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"type":      "AuctionAlreadyExists",
+			"auctionId": domainErr.Data,
+		})
+	case domain.ErrorAuctionHasEnded:
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"type":      "AuctionHasEnded",
+			"auctionId": domainErr.Data,
+		})
+	case domain.ErrorAuctionHasNotStarted:
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"type":      "AuctionHasNotStarted",
+			"auctionId": domainErr.Data,
+		})
+	case domain.ErrorSellerCannotPlaceBids:
+		resp := map[string]interface{}{"type": "SellerCannotPlaceBids"}
+		if data, ok := domainErr.Data.(map[string]interface{}); ok {
+			for k, v := range data {
+				resp[k] = v
+			}
+		}
+		respondJSON(w, http.StatusBadRequest, resp)
+	case domain.ErrorMustPlaceBidOverHighest:
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"type":   "MustPlaceBidOverHighestBid",
+			"amount": domainErr.Data,
+		})
+	default:
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"type":    string(domainErr.Type),
+			"message": domainErr.Error(),
+		})
+	}
 }

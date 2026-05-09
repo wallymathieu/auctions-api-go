@@ -96,9 +96,9 @@ func TestAPI(t *testing.T) {
 		rr := httptest.NewRecorder()
 		app.Router.ServeHTTP(rr, req)
 
-		// Check response - should be conflict (409)
-		if status := rr.Code; status != http.StatusConflict {
-			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusConflict)
+		// Check response - duplicate auction is a typed bad-request error (400)
+		if status := rr.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
 		}
 	})
 
