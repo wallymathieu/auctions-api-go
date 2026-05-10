@@ -52,7 +52,7 @@ func getAuction(state *AppState, getCurrentTime func() time.Time) http.HandlerFu
 		repo := state.GetRepository()
 		entry, ok := repo[domain.AuctionId(id)]
 		if !ok {
-			respondDomainError(w, domain.NewUnknownAuctionError(domain.AuctionId(id)))
+			respondDomainError(w, domain.NewAuctionNotFoundError(domain.AuctionId(id)))
 			return
 		}
 

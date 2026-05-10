@@ -103,8 +103,8 @@ func (e DomainError) Error() string {
 	return string(e.Type)
 }
 
-// NewUnknownAuctionError creates a new UnknownAuction error
-func NewUnknownAuctionError(id AuctionId) error {
+// NewAuctionNotFoundError creates a new ErrorAuctionNotFound error
+func NewAuctionNotFoundError(id AuctionId) error {
 	return DomainError{
 		Type: ErrorAuctionNotFound,
 		Data: id,
