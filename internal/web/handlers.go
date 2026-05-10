@@ -135,7 +135,7 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 
 		// Reject auctions whose EndsAt is not strictly in the future.
 		if !req.EndsAt.After(now) {
-			respondDomainError(w, domain.NewAuctionEndsAtInPastError(req.ID))
+			respondDomainError(w, domain.NewAuctionHasEndedError(req.ID))
 			return
 		}
 
@@ -293,11 +293,8 @@ func withAuctionId(typeName string, status int) domainErrorRenderer {
 	}
 }
 
-// Wire type names mirror the reference (F#) implementation. ErrorAuctionEndsAtInPast
-// shares the "AuctionHasEnded" wire value with ErrorAuctionHasEnded, so the lookup
-// resolves both Go-side codes through the same renderer entry.
 var domainErrorRenderers = map[domain.ErrorType]domainErrorRenderer{
-	domain.ErrorAuctionNotFound:       withAuctionId("AuctionNotFound", http.StatusNotFound),
+	domain.ErrorAuctionNotFound:      withAuctionId("AuctionNotFound", http.StatusNotFound),
 	domain.ErrorAuctionAlreadyExists: withAuctionId("AuctionAlreadyExists", http.StatusBadRequest),
 	domain.ErrorAuctionHasEnded:      withAuctionId("AuctionHasEnded", http.StatusBadRequest),
 	domain.ErrorAuctionHasNotStarted: withAuctionId("AuctionHasNotStarted", http.StatusBadRequest),

@@ -86,7 +86,6 @@ const (
 	ErrorAuctionAlreadyExists    ErrorType = "AuctionAlreadyExists"
 	ErrorAuctionHasEnded         ErrorType = "AuctionHasEnded"
 	ErrorAuctionHasNotStarted    ErrorType = "AuctionHasNotStarted"
-	ErrorAuctionEndsAtInPast     ErrorType = "AuctionHasEnded"
 	ErrorSellerCannotPlaceBids   ErrorType = "SellerCannotPlaceBids"
 	ErrorMustPlaceBidOverHighest ErrorType = "MustPlaceBidOverHighestBid"
 	ErrorAlreadyPlacedBid        ErrorType = "AlreadyPlacedBid"
@@ -144,15 +143,6 @@ func NewSellerCannotPlaceBidsError(userId UserId, auctionId AuctionId) error {
 			"userId":    userId,
 			"auctionId": auctionId,
 		},
-	}
-}
-
-// NewAuctionEndsAtInPastError is returned when an auction is created with an
-// EndsAt that is not strictly in the future relative to the current time.
-func NewAuctionEndsAtInPastError(id AuctionId) error {
-	return DomainError{
-		Type: ErrorAuctionEndsAtInPast,
-		Data: id,
 	}
 }
 
