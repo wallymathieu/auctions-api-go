@@ -165,6 +165,10 @@ func TestBlindAuctionState(t *testing.T) {
 		if err == nil {
 			t.Errorf("Expected error when adding bid to ended auction")
 		}
+
+		if domainErr, ok := err.(domain.DomainError); !ok || domainErr.Type != domain.ErrorAuctionHasEnded {
+			t.Errorf("Expected AuctionHasEnded error, got %v", err)
+		}
 	})
 
 	t.Run("CanGetWinnerAndPriceFromEndedAuction", func(t *testing.T) {
@@ -457,6 +461,10 @@ func TestTimedAscendingAuctionState(t *testing.T) {
 		_, err := stateWith1Bid.AddBid(smallRaiseBid)
 		if err == nil {
 			t.Errorf("Expected error when bid doesn't meet minimum raise")
+		}
+
+		if domainErr, ok := err.(domain.DomainError); !ok || domainErr.Type != domain.ErrorMustPlaceBidOverHighest {
+			t.Errorf("Expected MustPlaceBidOverHighestBid error, got %v", err)
 		}
 
 		// Now try with a bid that does meet the minimum raise

@@ -37,7 +37,7 @@ func getAuctions(state *AppState) http.HandlerFunc {
 }
 
 // getAuction returns a specific auction
-func getAuction(state *AppState) http.HandlerFunc {
+func getAuction(state *AppState, getCurrentTime func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse auction ID from path
 		vars := mux.Vars(r)
@@ -52,12 +52,13 @@ func getAuction(state *AppState) http.HandlerFunc {
 		repo := state.GetRepository()
 		entry, ok := repo[domain.AuctionId(id)]
 		if !ok {
-			respondError(w, http.StatusNotFound, "Auction not found")
+			respondDomainError(w, domain.NewAuctionNotFoundError(domain.AuctionId(id)))
 			return
 		}
 
 		auction := entry.Auction
-		auctionState := entry.State
+		// Advance state to the current time so a winner surfaces once the auction has ended.
+		auctionState := entry.State.Increment(getCurrentTime())
 
 		// Get bids
 		bids := auctionState.GetBids()
@@ -130,9 +131,17 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 			Currency: req.Currency,
 		}
 
+		now := getCurrentTime()
+
+		// Reject auctions whose EndsAt is not strictly in the future.
+		if !req.EndsAt.After(now) {
+			respondDomainError(w, domain.NewAuctionHasEndedError(req.ID))
+			return
+		}
+
 		// Create command
 		cmd := domain.AddAuctionCommand{
-			Time:    getCurrentTime(),
+			Time:    now,
 			Auction: auction,
 		}
 
@@ -146,15 +155,7 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 		repo := state.GetRepository()
 		event, newRepo, err := domain.Handle(cmd, repo)
 		if err != nil {
-			var domainErr domain.DomainError
-			ok := false
-			if domainErr, ok = err.(domain.DomainError); ok {
-				if domainErr.Type == domain.ErrorAuctionAlreadyExists {
-					respondError(w, http.StatusConflict, err.Error())
-					return
-				}
-			}
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondDomainError(w, err)
 			return
 		}
 
@@ -219,26 +220,11 @@ func placeBid(state *AppState, onCommand func(domain.Command) error, onEvent fun
 			return
 		}
 
-		// Get auction from repository
-		repo := state.GetRepository()
-		_, ok := repo[domain.AuctionId(id)]
-		if !ok {
-			respondError(w, http.StatusNotFound, "Auction not found")
-			return
-		}
-
 		// Handle command
+		repo := state.GetRepository()
 		event, newRepo, err := domain.Handle(cmd, repo)
 		if err != nil {
-			var domainErr domain.DomainError
-			ok := false
-			if domainErr, ok = err.(domain.DomainError); ok {
-				if domainErr.Type == domain.ErrorUnknownAuction {
-					respondError(w, http.StatusNotFound, "Auction not found")
-					return
-				}
-			}
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondDomainError(w, err)
 			return
 		}
 
@@ -287,4 +273,75 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 // respondError responds with an error message
 func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, ApiError{Message: message})
+}
+
+// domainErrorRenderer maps a domain error code to an HTTP status and a
+// payload builder over the error's structured Data. The web layer is the
+// only place that knows how to render domain codes for clients.
+type domainErrorRenderer struct {
+	status  int
+	payload func(data interface{}) map[string]interface{}
+}
+
+// withAuctionId returns a renderer that produces {type, auctionId} payloads.
+func withAuctionId(typeName string, status int) domainErrorRenderer {
+	return domainErrorRenderer{
+		status: status,
+		payload: func(data interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": typeName, "auctionId": data}
+		},
+	}
+}
+
+var domainErrorRenderers = map[domain.ErrorType]domainErrorRenderer{
+	domain.ErrorAuctionNotFound:      withAuctionId("AuctionNotFound", http.StatusNotFound),
+	domain.ErrorAuctionAlreadyExists: withAuctionId("AuctionAlreadyExists", http.StatusBadRequest),
+	domain.ErrorAuctionHasEnded:      withAuctionId("AuctionHasEnded", http.StatusBadRequest),
+	domain.ErrorAuctionHasNotStarted: withAuctionId("AuctionHasNotStarted", http.StatusBadRequest),
+	domain.ErrorAlreadyPlacedBid: {
+		status: http.StatusBadRequest,
+		payload: func(_ interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": "AlreadyPlacedBid"}
+		},
+	},
+	domain.ErrorSellerCannotPlaceBids: {
+		status: http.StatusBadRequest,
+		payload: func(data interface{}) map[string]interface{} {
+			resp := map[string]interface{}{"type": "SellerCannotPlaceBids"}
+			if d, ok := data.(map[string]interface{}); ok {
+				for k, v := range d {
+					resp[k] = v
+				}
+			}
+			return resp
+		},
+	},
+	domain.ErrorMustPlaceBidOverHighest: {
+		status: http.StatusBadRequest,
+		payload: func(data interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": "MustPlaceBidOverHighestBid", "amount": data}
+		},
+	},
+}
+
+// respondDomainError translates a domain error into a typed HTTP error
+// envelope ({"type": "...", ...}) for mapped domain codes. Non-domain errors
+// and unmapped codes are logged and returned as a generic 500 with a plain
+// {"message": "Internal server error"} body so internal details never leak.
+func respondDomainError(w http.ResponseWriter, err error) {
+	domainErr, ok := err.(domain.DomainError)
+	if !ok {
+		log.Printf("non-domain error at HTTP boundary: %v", err)
+		respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	renderer, ok := domainErrorRenderers[domainErr.Type]
+	if !ok {
+		log.Printf("unmapped domain error code at HTTP boundary: %v", domainErr)
+		respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	respondJSON(w, renderer.status, renderer.payload(domainErr.Data))
 }

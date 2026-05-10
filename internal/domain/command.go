@@ -243,7 +243,7 @@ func Handle(cmd Command, repo Repository) (Event, Repository, error) {
 		
 		entry, exists := repo[auctionId]
 		if !exists {
-			return nil, repo, NewUnknownAuctionError(auctionId)
+			return nil, repo, NewAuctionNotFoundError(auctionId)
 		}
 		
 		// Validate bid

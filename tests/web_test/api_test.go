@@ -38,8 +38,10 @@ func TestAPI(t *testing.T) {
 	app := web.NewApp(domain.Repository{}, onCommand, onEvent, getCurrentTime)
 
 	// Define JWT headers
-	sellerJWT := "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
-	buyerJWT := "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"
+	// JWT payloads: {"sub": <id>, "name": <name>, "u_typ": "0"} (0 = BuyerOrSeller)
+	sellerJWT := "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="   // sub=a1, name=Test
+	buyerJWT := "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"    // sub=a2, name=Buyer
+	buyer2JWT := "eyJzdWIiOiJhMyIsICJuYW1lIjoiQnV5ZXIyIiwgInVfdHlwIjoiMCJ9"   // sub=a3, name=Buyer2
 
 	// Define test auction request
 	auctionReq := `{
@@ -96,9 +98,20 @@ func TestAPI(t *testing.T) {
 		rr := httptest.NewRecorder()
 		app.Router.ServeHTTP(rr, req)
 
-		// Check response - should be conflict (409)
-		if status := rr.Code; status != http.StatusConflict {
-			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusConflict)
+		// Check response - duplicate auction is a typed bad-request error (400)
+		if status := rr.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "AuctionAlreadyExists"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(1); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
 		}
 	})
 
@@ -259,6 +272,17 @@ func TestAPI(t *testing.T) {
 		if status := rr.Code; status != http.StatusNotFound {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusNotFound)
 		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "AuctionNotFound"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(999); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
+		}
 	})
 
 	// Test seller cannot bid on own auction
@@ -277,9 +301,44 @@ func TestAPI(t *testing.T) {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
 		}
 
-		// Response should contain an error about seller not being able to bid
-		if !bytes.Contains(rr.Body.Bytes(), []byte("SellerCannotPlaceBids")) {
-			t.Errorf("expected error about seller not being able to bid, got: %s", rr.Body.String())
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "SellerCannotPlaceBids"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["userId"], "a1"; got != want {
+			t.Errorf("wrong userId in error body: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(1); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
+		}
+	})
+
+	// Test bid below minimum raise returns structured error with amount
+	t.Run("BidBelowMinimumRaise", func(t *testing.T) {
+		bidReq := `{"amount": 5}`
+		req, _ := http.NewRequest("POST", "/auctions/1/bids", bytes.NewBufferString(bidReq))
+		req.Header.Set("x-jwt-payload", buyer2JWT)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		app.Router.ServeHTTP(rr, req)
+
+		if status := rr.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "MustPlaceBidOverHighestBid"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["amount"], float64(11); got != want {
+			t.Errorf("wrong amount in error body: got %v want %v", got, want)
 		}
 	})
 
@@ -296,6 +355,14 @@ func TestAPI(t *testing.T) {
 		// Check response - should be unauthorized (401)
 		if status := rr.Code; status != http.StatusUnauthorized {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusUnauthorized)
+		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["message"], "Unauthorized"; got != want {
+			t.Errorf("wrong error message: got %v want %v", got, want)
 		}
 	})
 }
