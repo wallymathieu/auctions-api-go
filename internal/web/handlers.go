@@ -324,10 +324,10 @@ var domainErrorRenderers = map[domain.ErrorType]domainErrorRenderer{
 	},
 }
 
-// respondDomainError translates a domain error into the typed HTTP error
-// envelope expected by API clients: {"type": "...", ...}. Non-domain errors
-// and unmapped codes are logged and returned as a generic 500 so internal
-// details never leak across the boundary.
+// respondDomainError translates a domain error into a typed HTTP error
+// envelope ({"type": "...", ...}) for mapped domain codes. Non-domain errors
+// and unmapped codes are logged and returned as a generic 500 with a plain
+// {"message": "Internal server error"} body so internal details never leak.
 func respondDomainError(w http.ResponseWriter, err error) {
 	domainErr, ok := err.(domain.DomainError)
 	if !ok {

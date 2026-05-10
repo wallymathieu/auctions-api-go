@@ -38,8 +38,10 @@ func TestAPI(t *testing.T) {
 	app := web.NewApp(domain.Repository{}, onCommand, onEvent, getCurrentTime)
 
 	// Define JWT headers
-	sellerJWT := "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
-	buyerJWT := "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"
+	// JWT payloads: {"sub": <id>, "name": <name>, "u_typ": "0"} (0 = BuyerOrSeller)
+	sellerJWT := "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="   // sub=a1, name=Test
+	buyerJWT := "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"    // sub=a2, name=Buyer
+	buyer2JWT := "eyJzdWIiOiJhMyIsICJuYW1lIjoiQnV5ZXIyIiwgInVfdHlwIjoiMCJ9"   // sub=a3, name=Buyer2
 
 	// Define test auction request
 	auctionReq := `{
@@ -311,6 +313,32 @@ func TestAPI(t *testing.T) {
 		}
 		if got, want := body["auctionId"], float64(1); got != want {
 			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
+		}
+	})
+
+	// Test bid below minimum raise returns structured error with amount
+	t.Run("BidBelowMinimumRaise", func(t *testing.T) {
+		bidReq := `{"amount": 5}`
+		req, _ := http.NewRequest("POST", "/auctions/1/bids", bytes.NewBufferString(bidReq))
+		req.Header.Set("x-jwt-payload", buyer2JWT)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		app.Router.ServeHTTP(rr, req)
+
+		if status := rr.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "MustPlaceBidOverHighestBid"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["amount"], float64(11); got != want {
+			t.Errorf("wrong amount in error body: got %v want %v", got, want)
 		}
 	})
 
