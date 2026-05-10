@@ -270,6 +270,17 @@ func TestAPI(t *testing.T) {
 		if status := rr.Code; status != http.StatusNotFound {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusNotFound)
 		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "AuctionNotFound"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(999); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
+		}
 	})
 
 	// Test seller cannot bid on own auction
@@ -288,9 +299,18 @@ func TestAPI(t *testing.T) {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
 		}
 
-		// Response should contain an error about seller not being able to bid
-		if !bytes.Contains(rr.Body.Bytes(), []byte("SellerCannotPlaceBids")) {
-			t.Errorf("expected error about seller not being able to bid, got: %s", rr.Body.String())
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "SellerCannotPlaceBids"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["userId"], "a1"; got != want {
+			t.Errorf("wrong userId in error body: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(1); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
 		}
 	})
 
@@ -307,6 +327,14 @@ func TestAPI(t *testing.T) {
 		// Check response - should be unauthorized (401)
 		if status := rr.Code; status != http.StatusUnauthorized {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusUnauthorized)
+		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["message"], "Unauthorized"; got != want {
+			t.Errorf("wrong error message: got %v want %v", got, want)
 		}
 	})
 }
