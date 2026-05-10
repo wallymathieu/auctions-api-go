@@ -133,9 +133,9 @@ func createAuction(state *AppState, onCommand func(domain.Command) error, onEven
 
 		now := getCurrentTime()
 
-		// Reject auctions that have already ended; they must not be persisted.
+		// Reject auctions whose EndsAt is not strictly in the future.
 		if !req.EndsAt.After(now) {
-			respondDomainError(w, domain.NewAuctionHasEndedError(req.ID))
+			respondDomainError(w, domain.NewAuctionEndsAtInPastError(req.ID))
 			return
 		}
 
@@ -275,53 +275,76 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, ApiError{Message: message})
 }
 
+// domainErrorRenderer maps a domain error code to an HTTP status and a
+// payload builder over the error's structured Data. The web layer is the
+// only place that knows how to render domain codes for clients.
+type domainErrorRenderer struct {
+	status  int
+	payload func(data interface{}) map[string]interface{}
+}
+
+// withAuctionId returns a renderer that produces {type, auctionId} payloads.
+func withAuctionId(typeName string, status int) domainErrorRenderer {
+	return domainErrorRenderer{
+		status: status,
+		payload: func(data interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": typeName, "auctionId": data}
+		},
+	}
+}
+
+// Wire type names mirror the reference (F#) implementation. ErrorAuctionEndsAtInPast
+// shares the "AuctionHasEnded" wire value with ErrorAuctionHasEnded, so the lookup
+// resolves both Go-side codes through the same renderer entry.
+var domainErrorRenderers = map[domain.ErrorType]domainErrorRenderer{
+	domain.ErrorAuctionNotFound:       withAuctionId("AuctionNotFound", http.StatusNotFound),
+	domain.ErrorAuctionAlreadyExists: withAuctionId("AuctionAlreadyExists", http.StatusBadRequest),
+	domain.ErrorAuctionHasEnded:      withAuctionId("AuctionHasEnded", http.StatusBadRequest),
+	domain.ErrorAuctionHasNotStarted: withAuctionId("AuctionHasNotStarted", http.StatusBadRequest),
+	domain.ErrorAlreadyPlacedBid: {
+		status: http.StatusBadRequest,
+		payload: func(_ interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": "AlreadyPlacedBid"}
+		},
+	},
+	domain.ErrorSellerCannotPlaceBids: {
+		status: http.StatusBadRequest,
+		payload: func(data interface{}) map[string]interface{} {
+			resp := map[string]interface{}{"type": "SellerCannotPlaceBids"}
+			if d, ok := data.(map[string]interface{}); ok {
+				for k, v := range d {
+					resp[k] = v
+				}
+			}
+			return resp
+		},
+	},
+	domain.ErrorMustPlaceBidOverHighest: {
+		status: http.StatusBadRequest,
+		payload: func(data interface{}) map[string]interface{} {
+			return map[string]interface{}{"type": "MustPlaceBidOverHighestBid", "amount": data}
+		},
+	},
+}
+
 // respondDomainError translates a domain error into the typed HTTP error
-// envelope expected by API clients: {"type": "...", ...}.
+// envelope expected by API clients: {"type": "...", ...}. Non-domain errors
+// and unmapped codes are logged and returned as a generic 500 so internal
+// details never leak across the boundary.
 func respondDomainError(w http.ResponseWriter, err error) {
 	domainErr, ok := err.(domain.DomainError)
 	if !ok {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("non-domain error at HTTP boundary: %v", err)
+		respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
-	switch domainErr.Type {
-	case domain.ErrorUnknownAuction:
-		respondJSON(w, http.StatusNotFound, map[string]interface{}{
-			"type":      "AuctionNotFound",
-			"auctionId": domainErr.Data,
-		})
-	case domain.ErrorAuctionAlreadyExists:
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"type":      "AuctionAlreadyExists",
-			"auctionId": domainErr.Data,
-		})
-	case domain.ErrorAuctionHasEnded:
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"type":      "AuctionHasEnded",
-			"auctionId": domainErr.Data,
-		})
-	case domain.ErrorAuctionHasNotStarted:
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"type":      "AuctionHasNotStarted",
-			"auctionId": domainErr.Data,
-		})
-	case domain.ErrorSellerCannotPlaceBids:
-		resp := map[string]interface{}{"type": "SellerCannotPlaceBids"}
-		if data, ok := domainErr.Data.(map[string]interface{}); ok {
-			for k, v := range data {
-				resp[k] = v
-			}
-		}
-		respondJSON(w, http.StatusBadRequest, resp)
-	case domain.ErrorMustPlaceBidOverHighest:
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"type":   "MustPlaceBidOverHighestBid",
-			"amount": domainErr.Data,
-		})
-	default:
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"type":    string(domainErr.Type),
-			"message": domainErr.Error(),
-		})
+	renderer, ok := domainErrorRenderers[domainErr.Type]
+	if !ok {
+		log.Printf("unmapped domain error code at HTTP boundary: %v", domainErr)
+		respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
 	}
+
+	respondJSON(w, renderer.status, renderer.payload(domainErr.Data))
 }

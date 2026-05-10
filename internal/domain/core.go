@@ -82,34 +82,32 @@ func (u *User) UnmarshalJSON(data []byte) error {
 type ErrorType string
 
 const (
-	ErrorUnknownAuction          ErrorType = "UnknownAuction"
+	ErrorAuctionNotFound          ErrorType = "AuctionNotFound"
 	ErrorAuctionAlreadyExists    ErrorType = "AuctionAlreadyExists"
 	ErrorAuctionHasEnded         ErrorType = "AuctionHasEnded"
 	ErrorAuctionHasNotStarted    ErrorType = "AuctionHasNotStarted"
+	ErrorAuctionEndsAtInPast     ErrorType = "AuctionHasEnded"
 	ErrorSellerCannotPlaceBids   ErrorType = "SellerCannotPlaceBids"
-	ErrorInvalidUserData         ErrorType = "InvalidUserData"
 	ErrorMustPlaceBidOverHighest ErrorType = "MustPlaceBidOverHighestBid"
 	ErrorAlreadyPlacedBid        ErrorType = "AlreadyPlacedBid"
 )
 
-// DomainError represents an error in the domain
+// DomainError carries a stable code (Type) and optional structured Data.
+// Rendering of human-readable messages is the responsibility of the outer
+// (e.g. HTTP) layer; this struct deliberately holds no free-form text.
 type DomainError struct {
-	Type    ErrorType
-	Message string
-	Data    interface{}
+	Type ErrorType
+	Data interface{}
 }
 
 func (e DomainError) Error() string {
-	if e.Message != "" {
-		return fmt.Sprintf("%s: %s", e.Type, e.Message)
-	}
 	return string(e.Type)
 }
 
 // NewUnknownAuctionError creates a new UnknownAuction error
 func NewUnknownAuctionError(id AuctionId) error {
 	return DomainError{
-		Type: ErrorUnknownAuction,
+		Type: ErrorAuctionNotFound,
 		Data: id,
 	}
 }
@@ -149,11 +147,12 @@ func NewSellerCannotPlaceBidsError(userId UserId, auctionId AuctionId) error {
 	}
 }
 
-// NewInvalidUserDataError creates a new InvalidUserData error
-func NewInvalidUserDataError(message string) error {
+// NewAuctionEndsAtInPastError is returned when an auction is created with an
+// EndsAt that is not strictly in the future relative to the current time.
+func NewAuctionEndsAtInPastError(id AuctionId) error {
 	return DomainError{
-		Type:    ErrorInvalidUserData,
-		Message: message,
+		Type: ErrorAuctionEndsAtInPast,
+		Data: id,
 	}
 }
 

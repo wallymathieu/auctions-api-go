@@ -100,6 +100,17 @@ func TestAPI(t *testing.T) {
 		if status := rr.Code; status != http.StatusBadRequest {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
 		}
+
+		var body map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to decode error body: %v", err)
+		}
+		if got, want := body["type"], "AuctionAlreadyExists"; got != want {
+			t.Errorf("wrong error type: got %v want %v", got, want)
+		}
+		if got, want := body["auctionId"], float64(1); got != want {
+			t.Errorf("wrong auctionId in error body: got %v want %v", got, want)
+		}
 	})
 
 	// Test get auctions
